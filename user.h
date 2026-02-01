@@ -1,5 +1,6 @@
 struct stat;
 struct rtcdate;
+struct pschedinfo;
 
 // system calls
 int fork(void);
@@ -24,6 +25,8 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int getlastcat(char*);
+int nice(int);
+int getschedstate(struct pschedinfo*);
 
 // ulib.c
 int stat(const char*, struct stat*);
