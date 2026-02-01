@@ -34,6 +34,16 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct mmap {
+  unsigned int addr;           // Start virtual address of the mapping
+  int length;                  // Size of the mapping
+  int prot;                    // Protection of the mapping
+  int flags;                   // Flags of the mapping
+  struct file *f;              // File for non-anonymous maps
+};
+
+#define MMAP_LIMIT 32
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -54,6 +64,8 @@ struct proc {
   int priority;                // Priority value of that process
   int nice;                    // Nice value
   int tick;                    // Total ticks accumulated
+  struct mmap map[MMAP_LIMIT]; // mmap info, sorted by starting address
+  int cur_mappings;            // Currently active mappings
 };
 
 // Process memory is laid out contiguously, low addresses first:
