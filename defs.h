@@ -120,6 +120,10 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+void            acquire_ptable_lock(void);
+void            release_ptable_lock(void);
+int             nice(int);
+int             getschedstate(struct pschedinfo*);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

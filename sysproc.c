@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "psched.h"
 
 int
 sys_fork(void)
@@ -60,19 +61,16 @@ int
 sys_sleep(void)
 {
   int n;
-  uint ticks0;
+  uint target_ticks;
 
   if(argint(0, &n) < 0)
     return -1;
   acquire(&tickslock);
-  ticks0 = ticks;
-  while(ticks - ticks0 < n){
-    if(myproc()->killed){
-      release(&tickslock);
-      return -1;
-    }
-    sleep(&ticks, &tickslock);
-  }
+  target_ticks = ticks + n;
+  acquire_ptable_lock();
+  myproc()->wakeup_ticks = target_ticks;
+  release_ptable_lock();
+  sleep(&ticks, &tickslock);
   release(&tickslock);
   return 0;
 }
@@ -88,4 +86,27 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int
+sys_nice(void)
+{
+  int n;
+  if(argint(0, &n) < 0)
+    return -1;
+  if(n < 0 || n > 20)
+    return -1;
+  return nice(n);
+}
+
+int
+sys_getschedstate(void)
+{
+  struct pschedinfo *psched;
+  if(argptr(0, (char**)&psched, sizeof(struct pschedinfo)) < 0)
+    return -1;
+  if(!psched)
+    return -1;
+  getschedstate(psched);
+  return 0;
 }

@@ -6,6 +6,9 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "psched.h"
+
+int last_priority_adjustment = 0;
 
 struct {
   struct spinlock lock;
@@ -88,6 +91,10 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->cpu_usage = 0;
+  p->priority = 0;
+  p->nice = 0;
+  p->tick = 0;
 
   release(&ptable.lock);
 
@@ -311,6 +318,21 @@ wait(void)
   }
 }
 
+void
+update_mlfq_priorities(void)
+{
+  if(ticks % 100 == 0 && ticks - last_priority_adjustment > 0) {
+    struct proc *p;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if(p->state != UNUSED) {
+        p->cpu_usage = p->cpu_usage / 2;
+        p->priority = p->cpu_usage / 2 + p->nice;
+      }
+    }
+    last_priority_adjustment = ticks;
+  }
+}
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -325,33 +347,43 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
 
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+    update_mlfq_priorities();
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+    // Find the highest priority (lowest value) runnable process
+    struct proc *high_priority_proc = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if(p->state == RUNNABLE && (!high_priority_proc || p->priority < high_priority_proc->priority)) {
+        high_priority_proc = p;
+      }
     }
-    release(&ptable.lock);
 
+    if(!high_priority_proc) {
+      release(&ptable.lock);
+      continue;
+    }
+
+    // Round-robin amongst processes with the highest priority
+    p = high_priority_proc;
+    do {
+      if(p->state == RUNNABLE && p->priority == high_priority_proc->priority) {
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+
+        switchkvm();
+        c->proc = 0;
+      }
+      p++;
+    } while(p < &ptable.proc[NPROC]);
+    release(&ptable.lock);
   }
 }
 
@@ -387,6 +419,8 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
+  myproc()->cpu_usage++;
+  myproc()->tick++;
   sched();
   release(&ptable.lock);
 }
@@ -460,7 +494,7 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan && ticks >= p->wakeup_ticks)
       p->state = RUNNABLE;
 }
 
@@ -531,4 +565,44 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+void
+acquire_ptable_lock(void)
+{
+  acquire(&ptable.lock);
+}
+
+void
+release_ptable_lock(void)
+{
+  release(&ptable.lock);
+}
+
+int
+nice(int n)
+{
+  acquire(&ptable.lock);
+  int cur_nice = myproc()->nice;
+  myproc()->nice = n;
+  release(&ptable.lock);
+  return cur_nice;
+}
+
+int
+getschedstate(struct pschedinfo *psched)
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  int i = 0;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    psched->inuse[i] = p->state == UNUSED ? 0 : 1;
+    psched->priority[i] = p->priority;
+    psched->nice[i] = p->nice;
+    psched->pid[i] = p->pid;
+    psched->ticks[i] = p->tick;
+    i++;
+  }
+  release(&ptable.lock);
+  return 0;
 }
