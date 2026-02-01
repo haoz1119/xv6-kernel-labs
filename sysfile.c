@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+char last_cat_file[256] = "Cat has not yet been called";
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -416,6 +418,28 @@ sys_exec(void)
     if(fetchstr(uarg, &argv[i]) < 0)
       return -1;
   }
+
+  // Track cat command invocations for getlastcat syscall
+  if (strncmp(path, "cat", 3) == 0 || strncmp(path, "/cat", 4) == 0 || strncmp(path, "./cat", 5) == 0) {
+    if(argv[1] == 0) {
+      safestrcpy(last_cat_file, "No args were passed", 256);
+    } else {
+      struct inode *ip;
+      int invalid_file = 0;
+      begin_op();
+      for(i = 1; argv[i] != 0; i++) {
+        if((ip = namei(argv[i])) == 0){
+          safestrcpy(last_cat_file, "Invalid filename", 256);
+          invalid_file = 1;
+          break;
+        }
+      }
+      end_op();
+      if(!invalid_file) {
+        safestrcpy(last_cat_file, argv[i-1], 256);
+      }
+    }
+  }
   return exec(path, argv);
 }
 
@@ -440,5 +464,21 @@ sys_pipe(void)
   }
   fd[0] = fd0;
   fd[1] = fd1;
+  return 0;
+}
+
+int
+sys_getlastcat(void)
+{
+  char *user_buf;
+
+  if(argptr(0, &user_buf, 256) < 0) {
+    return -1;
+  }
+
+  if(!user_buf)
+    return -1;
+
+  safestrcpy(user_buf, last_cat_file, sizeof(last_cat_file));
   return 0;
 }
