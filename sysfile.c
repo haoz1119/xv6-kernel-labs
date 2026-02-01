@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "mmap.h"
 
 char last_cat_file[256] = "Cat has not yet been called";
 
@@ -481,4 +482,37 @@ sys_getlastcat(void)
 
   safestrcpy(user_buf, last_cat_file, sizeof(last_cat_file));
   return 0;
+}
+
+int
+sys_mmap(void)
+{
+  void *addr;
+  int length, prot, flags, fd = 0, offset;
+  struct file *f = (void *)0;
+
+  if (argint(0, (int *)&addr) < 0)
+    return -1;
+  if (argint(1, &length) < 0 || argint(2, &prot) < 0 || argint(3, &flags) < 0 || argint(5, &offset) < 0)
+    return -1;
+  if (argfd(4, &fd, &f) < 0) {
+    if (flags & MAP_ANONYMOUS) {
+      // ignore it
+    } else {
+      return -1;
+    }
+  } else {
+    filedup(f);
+  }
+
+  return (int)mmap(addr, length, prot, flags, f, offset);
+}
+
+int
+sys_munmap(void)
+{
+  int addr, size;
+  if (argint(0, &addr) < 0 || argint(1, &size))
+    return -1;
+  return munmap((void *)addr, size);
 }

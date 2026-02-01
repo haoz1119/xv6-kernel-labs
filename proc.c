@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
+#include "mmap.h"
 #include "mmu.h"
 #include "x86.h"
 #include "proc.h"
@@ -95,6 +96,7 @@ found:
   p->priority = 0;
   p->nice = 0;
   p->tick = 0;
+  p->cur_mappings = 0;
 
   release(&ptable.lock);
 
@@ -215,6 +217,35 @@ fork(void)
       np->ofile[i] = filedup(curproc->ofile[i]);
   np->cwd = idup(curproc->cwd);
 
+  // Copy all mmap mappings to child
+  for(i = 0; i < curproc->cur_mappings; ++i) {
+    memmove(&np->map[i], &curproc->map[i], sizeof(struct mmap));
+    for(uint addr = curproc->map[i].addr; addr < PGROUNDUP(curproc->map[i].addr + curproc->map[i].length); addr += PGSIZE) {
+      pte_t *pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
+      if(curproc->map[i].flags & MAP_SHARED) {
+        if(!pte || !PTE_ADDR(*pte)) {
+          if(alloc_and_map_page(curproc, &curproc->map[i], addr))
+            return -1;
+          pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
+        }
+        if(!pte)
+          return -1;
+        np->map[i].prot &= ~PROT_CHILD;
+        if(mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), np->map[i].prot | PTE_U))
+          return -1;
+        np->map[i].prot |= PROT_CHILD;
+      } else {
+        if(!pte)
+          continue;
+        int prot = np->map[i].prot | PTE_U;
+        prot &= ~PROT_WRITE;
+        if(mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), prot))
+          return -1;
+      }
+    }
+  }
+  np->cur_mappings = curproc->cur_mappings;
+
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
@@ -248,6 +279,10 @@ exit(void)
       curproc->ofile[fd] = 0;
     }
   }
+
+  // Unmap all mmap mappings
+  munmap((void *)MMAPBASE, KERNBASE - MMAPBASE);
+  curproc->cur_mappings = 0;
 
   begin_op();
   iput(curproc->cwd);

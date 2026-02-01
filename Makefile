@@ -11,6 +11,7 @@ OBJS = \
 	lapic.o\
 	log.o\
 	main.o\
+	mmap.o\
 	mp.o\
 	picirq.o\
 	pipe.o\
@@ -182,6 +183,7 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_getlastcat\
+	_test\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

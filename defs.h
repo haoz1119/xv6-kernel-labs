@@ -2,13 +2,19 @@ struct buf;
 struct context;
 struct file;
 struct inode;
+struct mmap;
 struct pipe;
 struct proc;
+struct pschedinfo;
 struct rtcdate;
 struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+
+// Forward declarations for types used in function prototypes
+typedef uint pte_t;
+typedef uint pde_t;
 
 // bio.c
 void            binit(void);
@@ -189,6 +195,13 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+pte_t*          walkpgdir(pde_t *pgdir, const void *va, int alloc);
+int             mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+
+// mmap.c
+void*           mmap(void*, int, int, int, struct file*, int);
+int             munmap(void*, int);
+int             alloc_and_map_page(struct proc*, struct mmap*, uint);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
+#include "mmap.h"
 #include "mmu.h"
 #include "proc.h"
 #include "x86.h"
@@ -77,7 +78,41 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
+  case T_PGFLT:
+    {
+      uint addr = rcr2();
+      struct proc *p = myproc();
+      if (addr >= MMAPBASE && addr < KERNBASE) {
+        // Lazy allocation for mmap
+        for (int i = 0; i < p->cur_mappings; ++i) {
+          uint lower = p->map[i].addr;
+          uint upper = PGROUNDUP(p->map[i].addr + p->map[i].length);
+          if (!(lower <= addr && addr < upper)) {
+            continue;
+          } else {
+            // Check guard page: MAP_GROWSUP set
+            if ((p->map[i].flags & MAP_GROWSUP) && PGROUNDDOWN(addr) + PGSIZE == upper) {
+              if ((i == p->cur_mappings - 1 ? KERNBASE : p->map[i+1].addr) >= upper + PGSIZE) {
+                  p->map[i].length = upper - lower + PGSIZE;
+              } else {
+                goto segfault;
+              }
+            }
+          }
 
+          if (alloc_and_map_page(p, &p->map[i], PGROUNDDOWN(addr))) {
+            goto segfault;
+          }
+
+          goto done;
+        }
+      }
+segfault:
+      cprintf("Segmentation Fault\n");
+      p->killed = 1;
+done:
+      break;
+    }
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
