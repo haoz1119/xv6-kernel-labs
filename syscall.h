@@ -23,3 +23,5 @@
 #define SYS_getlastcat 22
 #define SYS_nice   23
 #define SYS_getschedstate 24
+#define SYS_mmap   25
+#define SYS_munmap 26

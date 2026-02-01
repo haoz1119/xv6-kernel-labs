@@ -27,6 +27,8 @@ int uptime(void);
 int getlastcat(char*);
 int nice(int);
 int getschedstate(struct pschedinfo*);
+void* mmap(void*, int, int, int, int, int);
+int munmap(void*, int);
 
 // ulib.c
 int stat(const char*, struct stat*);

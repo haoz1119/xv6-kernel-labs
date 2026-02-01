@@ -106,6 +106,8 @@ extern int sys_uptime(void);
 extern int sys_getlastcat(void);
 extern int sys_nice(void);
 extern int sys_getschedstate(void);
+extern int sys_mmap(void);
+extern int sys_munmap(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -132,6 +134,8 @@ static int (*syscalls[])(void) = {
 [SYS_getlastcat] sys_getlastcat,
 [SYS_nice]    sys_nice,
 [SYS_getschedstate] sys_getschedstate,
+[SYS_mmap]    sys_mmap,
+[SYS_munmap]  sys_munmap,
 };
 
 void
